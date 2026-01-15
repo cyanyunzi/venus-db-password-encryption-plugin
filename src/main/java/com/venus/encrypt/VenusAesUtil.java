@@ -1,20 +1,22 @@
 package com.venus.encrypt;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
+import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.logging.Logger;
 
 public final class VenusAesUtil {
+    private static final Logger logger = Logger.getLogger(VenusAesUtil.class.getName());
+
     // 固定加密种子（可替换为自定义密钥种子，建议长度≥16位）
-    private static final String ENCRYPT_SEED = "venus"; // 自定义种子
+    private static final String ENCRYPT_SEED = "venus";
     // AES算法名称
     private static final String AES_ALGORITHM = "AES";
-    // 完整算法模式+填充方式（JDK 1.8兼容，消除默认值依赖）
-    private static final String AES_ECB_PKCS5 = "AES";
+    // 完整算法模式+填充方式（JDK 1.8兼容）
+    private static final String AES_ECB_PKCS5 = "AES/ECB/PKCS5Padding";
     // 密钥长度（128位，JDK 1.8默认支持，无需解锁JCE）
     private static final int KEY_SIZE = 128;
 
@@ -24,14 +26,13 @@ public final class VenusAesUtil {
     // 静态代码块：初始化固定密钥，仅执行一次
     static {
         try {
-            // 1. 生成密钥生成器
-            KeyGenerator keyGenerator = KeyGenerator.getInstance(AES_ALGORITHM);
-            // 2. 初始化密钥生成器（JDK 1.8兼容，跨JDK无差异）
-            SecureRandom secureRandom = new SecureRandom(ENCRYPT_SEED.getBytes(StandardCharsets.UTF_8));
-            keyGenerator.init(KEY_SIZE, secureRandom);
-            // 3. 生成原始密钥并转换为SecretKeySpec
-            SecretKey originalKey = keyGenerator.generateKey();
-            byte[] keyBytes = originalKey.getEncoded();
+            // 使用SHA-256哈希算法从种子生成固定长度的密钥
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            byte[] hash = sha256.digest(ENCRYPT_SEED.getBytes(StandardCharsets.UTF_8));
+            // 截取前16字节（128位）作为AES密钥
+            byte[] keyBytes = new byte[KEY_SIZE / 8];
+            System.arraycopy(hash, 0, keyBytes, 0, keyBytes.length);
+            // 创建固定密钥
             AES_FIXED_KEY = new SecretKeySpec(keyBytes, AES_ALGORITHM);
         } catch (Exception e) {
             throw new RuntimeException("AES密钥初始化失败", e);
@@ -59,7 +60,7 @@ public final class VenusAesUtil {
             // 4. 加密结果转Base64字符串返回
             return Base64.getEncoder().encodeToString(encryptBytes);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.warning("VenusAesUtil encrypt error:" + e.getMessage());
         }
         return null;
     }
@@ -85,12 +86,10 @@ public final class VenusAesUtil {
             // 4. 解密结果转UTF-8字符串返回
             return new String(decryptBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.warning("VenusAesUtil decrypt error:" + e.getMessage());
         }
         return null;
     }
-
-
 
     public static void main(String[] args) {
         String[] keys = {"venustech.taihe.db.CONF"};
@@ -101,6 +100,7 @@ public final class VenusAesUtil {
             String decryptString = decrypt(encryptString);
             System.out.println("解密 = " + decryptString);
         }
+        String decryptString = decrypt("Do94bppAKoQDhFn8ODJrf+DKtQj4J/U3hYN1HGKeEfU=");
+        System.out.println(decryptString);
     }
 }
-
